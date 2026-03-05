@@ -1,0 +1,700 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>PeerDrop — Room</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+  <style>
+    :root {
+      --bg: #0a0a0f;
+      --surface: #13131a;
+      --surface2: #1a1a24;
+      --border: #1e1e2e;
+      --accent: #7c6cfc;
+      --text: #e2e0f0;
+      --muted: #5a5870;
+      --bubble-self: #2a2560;
+      --bubble-other: #1a1a24;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: 'DM Sans', sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      height: 100vh;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+    .mono { font-family: 'DM Mono', monospace; }
+
+    /* ヘッダー */
+    header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 12px 20px;
+      border-bottom: 1px solid var(--border);
+      background: var(--surface);
+      flex-shrink: 0;
+    }
+
+    .header-left { display: flex; align-items: center; gap: 12px; }
+
+    .logo-small {
+      font-size: 15px;
+      font-weight: 600;
+      letter-spacing: -0.3px;
+    }
+
+    .connection-badge {
+      font-size: 11px;
+      padding: 3px 8px;
+      border-radius: 20px;
+      background: rgba(16,185,129,0.15);
+      color: #10b981;
+      border: 1px solid rgba(16,185,129,0.2);
+      display: flex;
+      align-items: center;
+      gap: 5px;
+    }
+
+    .connection-badge::before {
+      content: '';
+      width: 5px;
+      height: 5px;
+      border-radius: 50%;
+      background: #10b981;
+    }
+
+    .header-actions { display: flex; gap: 8px; }
+
+    .icon-btn {
+      width: 34px;
+      height: 34px;
+      border-radius: 8px;
+      border: 1px solid var(--border);
+      background: transparent;
+      color: var(--muted);
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 13px;
+      transition: all 0.2s;
+    }
+
+    .icon-btn:hover { border-color: var(--muted); color: var(--text); }
+    .icon-btn.active { background: rgba(124,108,252,0.15); border-color: var(--accent); color: var(--accent); }
+    .icon-btn.danger { }
+    .icon-btn.danger:hover { border-color: #f87171; color: #f87171; }
+
+    /* メインエリア */
+    main {
+      flex: 1;
+      display: flex;
+      overflow: hidden;
+    }
+
+    /* チャットエリア */
+    .chat-area {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+
+    .messages {
+      flex: 1;
+      overflow-y: auto;
+      padding: 20px;
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+      scrollbar-width: thin;
+      scrollbar-color: var(--border) transparent;
+    }
+
+    .messages::-webkit-scrollbar { width: 4px; }
+    .messages::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+
+    .msg-row {
+      display: flex;
+      flex-direction: column;
+      max-width: 72%;
+    }
+
+    .msg-row.self { align-self: flex-end; align-items: flex-end; }
+    .msg-row.other { align-self: flex-start; align-items: flex-start; }
+
+    .bubble {
+      padding: 10px 14px;
+      border-radius: 14px;
+      font-size: 14px;
+      line-height: 1.5;
+      word-break: break-word;
+    }
+
+    .msg-row.self .bubble {
+      background: var(--bubble-self);
+      border-bottom-right-radius: 4px;
+      color: #c4beff;
+    }
+
+    .msg-row.other .bubble {
+      background: var(--bubble-other);
+      border: 1px solid var(--border);
+      border-bottom-left-radius: 4px;
+    }
+
+    .msg-time {
+      font-size: 10px;
+      color: var(--muted);
+      margin-top: 3px;
+      padding: 0 2px;
+    }
+
+    /* ファイルバブル */
+    .file-bubble {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 10px 14px;
+      border-radius: 14px;
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      cursor: pointer;
+      transition: border-color 0.2s;
+      min-width: 200px;
+    }
+
+    .file-bubble:hover { border-color: var(--accent); }
+
+    .file-icon {
+      width: 36px;
+      height: 36px;
+      border-radius: 8px;
+      background: rgba(124,108,252,0.15);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: var(--accent);
+      font-size: 14px;
+      flex-shrink: 0;
+    }
+
+    .file-info { flex: 1; overflow: hidden; }
+    .file-name { font-size: 13px; font-weight: 500; truncate: true; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .file-size { font-size: 11px; color: var(--muted); margin-top: 2px; }
+
+    .file-progress {
+      height: 2px;
+      background: var(--border);
+      border-radius: 1px;
+      margin-top: 6px;
+      overflow: hidden;
+    }
+
+    .file-progress-bar {
+      height: 100%;
+      background: var(--accent);
+      border-radius: 1px;
+      transition: width 0.3s;
+    }
+
+    /* システムメッセージ */
+    .sys-msg {
+      text-align: center;
+      font-size: 11px;
+      color: var(--muted);
+      padding: 4px 0;
+    }
+
+    /* 音声通話バナー */
+    #call-banner {
+      display: none;
+      align-items: center;
+      justify-content: space-between;
+      padding: 10px 20px;
+      background: rgba(124,108,252,0.1);
+      border-bottom: 1px solid rgba(124,108,252,0.2);
+      font-size: 13px;
+      color: var(--accent);
+      flex-shrink: 0;
+    }
+
+    #call-banner.active { display: flex; }
+
+    .call-timer { font-family: 'DM Mono', monospace; font-size: 13px; }
+
+    .btn-end-call {
+      padding: 5px 14px;
+      background: rgba(248,113,113,0.15);
+      color: #f87171;
+      border: 1px solid rgba(248,113,113,0.2);
+      border-radius: 6px;
+      font-size: 12px;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+
+    .btn-end-call:hover { background: rgba(248,113,113,0.25); }
+
+    /* 入力エリア */
+    .input-area {
+      padding: 12px 16px;
+      border-top: 1px solid var(--border);
+      background: var(--surface);
+      display: flex;
+      align-items: flex-end;
+      gap: 8px;
+      flex-shrink: 0;
+    }
+
+    .attach-btn {
+      width: 36px;
+      height: 36px;
+      border-radius: 8px;
+      border: 1px solid var(--border);
+      background: transparent;
+      color: var(--muted);
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 14px;
+      transition: all 0.2s;
+      flex-shrink: 0;
+    }
+
+    .attach-btn:hover { border-color: var(--accent); color: var(--accent); }
+
+    .text-input {
+      flex: 1;
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 9px 14px;
+      color: var(--text);
+      font-family: 'DM Sans', sans-serif;
+      font-size: 14px;
+      outline: none;
+      resize: none;
+      max-height: 120px;
+      line-height: 1.5;
+      transition: border-color 0.2s;
+    }
+
+    .text-input:focus { border-color: var(--accent); }
+    .text-input::placeholder { color: var(--muted); }
+
+    .send-btn {
+      width: 36px;
+      height: 36px;
+      border-radius: 8px;
+      background: var(--accent);
+      border: none;
+      color: white;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 13px;
+      transition: all 0.2s;
+      flex-shrink: 0;
+    }
+
+    .send-btn:hover { background: #6b5ce7; }
+    .send-btn:disabled { opacity: 0.3; cursor: not-allowed; }
+
+    /* 画像プレビュー */
+    .img-preview { max-width: 240px; border-radius: 10px; cursor: pointer; }
+
+    /* ライトボックス */
+    #lightbox {
+      display: none;
+      position: fixed;
+      inset: 0;
+      background: rgba(0,0,0,0.85);
+      z-index: 100;
+      align-items: center;
+      justify-content: center;
+    }
+    #lightbox.active { display: flex; }
+    #lightbox img { max-width: 90vw; max-height: 90vh; border-radius: 8px; }
+    #lightbox-close {
+      position: fixed;
+      top: 20px;
+      right: 20px;
+      color: white;
+      font-size: 24px;
+      cursor: pointer;
+      opacity: 0.7;
+    }
+    #lightbox-close:hover { opacity: 1; }
+  </style>
+</head>
+<body>
+
+  <!-- ヘッダー -->
+  <header>
+    <div class="header-left">
+      <span class="logo-small">PeerDrop</span>
+      <span class="connection-badge" id="conn-badge">接続済み</span>
+    </div>
+    <div class="header-actions">
+      <button class="icon-btn" id="mic-btn" title="音声通話" onclick="toggleCall()">
+        <i class="fas fa-microphone"></i>
+      </button>
+      <button class="icon-btn danger" title="切断" onclick="disconnect()">
+        <i class="fas fa-phone-slash"></i>
+      </button>
+    </div>
+  </header>
+
+  <!-- 通話バナー -->
+  <div id="call-banner">
+    <div style="display:flex;align-items:center;gap:8px;">
+      <i class="fas fa-microphone" style="font-size:12px;"></i>
+      <span>音声通話中</span>
+      <span class="call-timer" id="call-timer">00:00</span>
+    </div>
+    <button class="btn-end-call" onclick="endCall()">通話を終了</button>
+  </div>
+
+  <!-- メインチャット -->
+  <main>
+    <div class="chat-area">
+      <div class="messages" id="messages">
+        <div class="sys-msg">🔒 P2P接続が確立されました。メッセージはサーバーを経由しません。</div>
+      </div>
+
+      <div class="input-area">
+        <label class="attach-btn" title="ファイルを送信">
+          <i class="fas fa-paperclip"></i>
+          <input type="file" style="display:none;" onchange="sendFile(this)">
+        </label>
+        <textarea
+          class="text-input"
+          id="msg-input"
+          placeholder="メッセージを送信..."
+          rows="1"
+          onkeydown="handleKey(event)"
+          oninput="autoResize(this)"
+        ></textarea>
+        <button class="send-btn" id="send-btn" onclick="sendMessage()">
+          <i class="fas fa-paper-plane"></i>
+        </button>
+      </div>
+    </div>
+  </main>
+
+  <!-- ライトボックス -->
+  <div id="lightbox" onclick="closeLightbox()">
+    <span id="lightbox-close"><i class="fas fa-times"></i></span>
+    <img id="lightbox-img" src="" alt="">
+  </div>
+
+  <audio id="remote-audio" autoplay></audio>
+
+  <script>
+    // index.htmlからの引き継ぎ
+    const role = sessionStorage.getItem('role');
+    const code = sessionStorage.getItem('code');
+    let pc = window.opener ? null : window._pc;
+    let channels = window._channels || {};
+
+    // P2Pが引き継げていない場合はホームに戻す
+    if (!pc || !role) {
+      window.location.href = '/';
+    }
+
+    // チャット・ファイル受信ロジック
+    let fileBuffer = {};
+
+    function setupDataChannels() {
+      const chatCh = channels.chat;
+      const fileCh = channels.file;
+
+      if (chatCh) {
+        chatCh.onmessage = (e) => {
+          addMessage(JSON.parse(e.data), 'other');
+        };
+      }
+
+      if (fileCh) {
+        fileCh.onmessage = (e) => {
+          handleFileChunk(e.data);
+        };
+      }
+
+      // ゲストはondatachannelで受け取る
+      if (pc) {
+        pc.ondatachannel = (e) => {
+          channels[e.channel.label] = e.channel;
+          e.channel.onmessage = e.channel.label === 'chat'
+            ? (ev) => addMessage(JSON.parse(ev.data), 'other')
+            : (ev) => handleFileChunk(ev.data);
+        };
+      }
+    }
+
+    setupDataChannels();
+
+    // メッセージ送信
+    function sendMessage() {
+      const input = document.getElementById('msg-input');
+      const text = input.value.trim();
+      if (!text || !channels.chat) return;
+
+      const msg = { type: 'text', text, time: Date.now() };
+      channels.chat.send(JSON.stringify(msg));
+      addMessage(msg, 'self');
+      input.value = '';
+      input.style.height = 'auto';
+    }
+
+    function handleKey(e) {
+      if (e.key === 'Enter' && !e.shiftKey) {
+        e.preventDefault();
+        sendMessage();
+      }
+    }
+
+    function autoResize(el) {
+      el.style.height = 'auto';
+      el.style.height = Math.min(el.scrollHeight, 120) + 'px';
+    }
+
+    // メッセージ表示
+    function addMessage(msg, side) {
+      const messages = document.getElementById('messages');
+      const row = document.createElement('div');
+      row.className = `msg-row ${side}`;
+
+      if (msg.type === 'text') {
+        row.innerHTML = `
+          <div class="bubble">${escapeHtml(msg.text)}</div>
+          <div class="msg-time">${formatTime(msg.time)}</div>
+        `;
+      } else if (msg.type === 'image') {
+        row.innerHTML = `
+          <img class="img-preview" src="${msg.url}" onclick="openLightbox('${msg.url}')">
+          <div class="msg-time">${formatTime(msg.time)}</div>
+        `;
+      } else if (msg.type === 'file') {
+        row.innerHTML = `
+          <div class="file-bubble" onclick="downloadFile('${msg.url}', '${escapeHtml(msg.name)}')">
+            <div class="file-icon"><i class="fas fa-file"></i></div>
+            <div class="file-info">
+              <div class="file-name">${escapeHtml(msg.name)}</div>
+              <div class="file-size">${formatSize(msg.size)}</div>
+            </div>
+            <i class="fas fa-download" style="color:var(--muted);font-size:12px;"></i>
+          </div>
+          <div class="msg-time">${formatTime(msg.time)}</div>
+        `;
+      }
+
+      messages.appendChild(row);
+      messages.scrollTop = messages.scrollHeight;
+      return row;
+    }
+
+    function addSystemMessage(text) {
+      const messages = document.getElementById('messages');
+      const el = document.createElement('div');
+      el.className = 'sys-msg';
+      el.textContent = text;
+      messages.appendChild(el);
+      messages.scrollTop = messages.scrollHeight;
+    }
+
+    // ファイル送信（チャンク分割）
+    const CHUNK_SIZE = 64 * 1024; // 64KB
+
+    async function sendFile(input) {
+      const file = input.files[0];
+      if (!file || !channels.file) return;
+      input.value = '';
+
+      const fileId = Math.random().toString(36).substring(2, 10);
+      const isImage = file.type.startsWith('image/');
+
+      // ヘッダー送信
+      channels.file.send(JSON.stringify({
+        type: 'header',
+        fileId,
+        name: file.name,
+        size: file.size,
+        mime: file.type,
+      }));
+
+      // プログレス付きバブル表示
+      const messages = document.getElementById('messages');
+      const row = document.createElement('div');
+      row.className = 'msg-row self';
+      row.innerHTML = `
+        <div class="file-bubble">
+          <div class="file-icon"><i class="fas fa-${isImage ? 'image' : 'file'}"></i></div>
+          <div class="file-info">
+            <div class="file-name">${escapeHtml(file.name)}</div>
+            <div class="file-size">${formatSize(file.size)}</div>
+            <div class="file-progress"><div class="file-progress-bar" id="prog-${fileId}" style="width:0%"></div></div>
+          </div>
+        </div>
+        <div class="msg-time">${formatTime(Date.now())}</div>
+      `;
+      messages.appendChild(row);
+      messages.scrollTop = messages.scrollHeight;
+
+      // チャンク送信
+      let offset = 0;
+      const reader = new FileReader();
+
+      const sendNextChunk = () => {
+        if (offset >= file.size) {
+          channels.file.send(JSON.stringify({ type: 'done', fileId }));
+          const prog = document.getElementById(`prog-${fileId}`);
+          if (prog) prog.style.width = '100%';
+          return;
+        }
+
+        const slice = file.slice(offset, offset + CHUNK_SIZE);
+        reader.readAsArrayBuffer(slice);
+      };
+
+      reader.onload = (e) => {
+        channels.file.send(e.target.result);
+        offset += e.target.result.byteLength;
+        const pct = Math.round((offset / file.size) * 100);
+        const prog = document.getElementById(`prog-${fileId}`);
+        if (prog) prog.style.width = `${pct}%`;
+        sendNextChunk();
+      };
+
+      sendNextChunk();
+    }
+
+    // ファイル受信
+    function handleFileChunk(data) {
+      if (typeof data === 'string') {
+        const msg = JSON.parse(data);
+        if (msg.type === 'header') {
+          fileBuffer[msg.fileId] = { ...msg, chunks: [] };
+        } else if (msg.type === 'done') {
+          const fb = fileBuffer[msg.fileId];
+          if (!fb) return;
+          const blob = new Blob(fb.chunks, { type: fb.mime });
+          const url = URL.createObjectURL(blob);
+          const isImage = fb.mime.startsWith('image/');
+          addMessage({
+            type: isImage ? 'image' : 'file',
+            url,
+            name: fb.name,
+            size: fb.size,
+            time: Date.now(),
+          }, 'other');
+          delete fileBuffer[msg.fileId];
+        }
+      } else {
+        // ArrayBuffer チャンク：最後に追加されたfileBufferに追加
+        const keys = Object.keys(fileBuffer);
+        if (keys.length) {
+          fileBuffer[keys[keys.length - 1]].chunks.push(data);
+        }
+      }
+    }
+
+    function downloadFile(url, name) {
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = name;
+      a.click();
+    }
+
+    // 音声通話
+    let localStream = null;
+    let callTimer = null;
+    let callSeconds = 0;
+    let inCall = false;
+
+    async function toggleCall() {
+      if (inCall) { endCall(); return; }
+
+      try {
+        localStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        localStream.getTracks().forEach(track => pc.addTrack(track, localStream));
+
+        pc.ontrack = (e) => {
+          document.getElementById('remote-audio').srcObject = e.streams[0];
+        };
+
+        inCall = true;
+        document.getElementById('mic-btn').classList.add('active');
+        document.getElementById('call-banner').classList.add('active');
+
+        callSeconds = 0;
+        callTimer = setInterval(() => {
+          callSeconds++;
+          const m = String(Math.floor(callSeconds / 60)).padStart(2, '0');
+          const s = String(callSeconds % 60).padStart(2, '0');
+          document.getElementById('call-timer').textContent = `${m}:${s}`;
+        }, 1000);
+
+        addSystemMessage('🎙️ 音声通話を開始しました');
+      } catch (e) {
+        alert('マイクへのアクセスが許可されていません');
+      }
+    }
+
+    function endCall() {
+      if (localStream) {
+        localStream.getTracks().forEach(t => t.stop());
+        localStream = null;
+      }
+      inCall = false;
+      clearInterval(callTimer);
+      document.getElementById('mic-btn').classList.remove('active');
+      document.getElementById('call-banner').classList.remove('active');
+      addSystemMessage('通話を終了しました');
+    }
+
+    function disconnect() {
+      if (confirm('接続を切断してホームに戻りますか？')) {
+        endCall();
+        if (pc) pc.close();
+        window.location.href = '/';
+      }
+    }
+
+    // ライトボックス
+    function openLightbox(url) {
+      document.getElementById('lightbox-img').src = url;
+      document.getElementById('lightbox').classList.add('active');
+    }
+
+    function closeLightbox() {
+      document.getElementById('lightbox').classList.remove('active');
+    }
+
+    // ユーティリティ
+    function escapeHtml(str) {
+      return str.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+    }
+
+    function formatTime(ts) {
+      return new Date(ts).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    }
+
+    function formatSize(bytes) {
+      if (bytes < 1024) return `${bytes} B`;
+      if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+      return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+    }
+  </script>
+</body>
+</html>

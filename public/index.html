@@ -1,0 +1,468 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>PeerDrop</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --bg: #0a0a0f;
+      --surface: #13131a;
+      --border: #1e1e2e;
+      --accent: #7c6cfc;
+      --accent-dim: #3d3580;
+      --text: #e2e0f0;
+      --muted: #5a5870;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: 'DM Sans', sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      overflow: hidden;
+    }
+    .mono { font-family: 'DM Mono', monospace; }
+
+    /* 背景のグリッド */
+    body::before {
+      content: '';
+      position: fixed;
+      inset: 0;
+      background-image:
+        linear-gradient(rgba(124,108,252,0.04) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(124,108,252,0.04) 1px, transparent 1px);
+      background-size: 40px 40px;
+      pointer-events: none;
+    }
+
+    /* 中央のグロー */
+    body::after {
+      content: '';
+      position: fixed;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      width: 600px;
+      height: 600px;
+      background: radial-gradient(circle, rgba(124,108,252,0.08) 0%, transparent 70%);
+      pointer-events: none;
+    }
+
+    .card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      padding: 40px;
+      width: 100%;
+      max-width: 420px;
+      position: relative;
+      z-index: 1;
+      box-shadow: 0 0 0 1px rgba(124,108,252,0.1), 0 32px 64px rgba(0,0,0,0.4);
+    }
+
+    .logo {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      margin-bottom: 36px;
+    }
+
+    .logo-icon {
+      width: 32px;
+      height: 32px;
+      background: linear-gradient(135deg, var(--accent), #a78bfa);
+      border-radius: 8px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .logo-icon svg {
+      width: 16px;
+      height: 16px;
+      fill: white;
+    }
+
+    .logo-text {
+      font-size: 18px;
+      font-weight: 600;
+      letter-spacing: -0.5px;
+    }
+
+    .tab-group {
+      display: flex;
+      background: var(--bg);
+      border-radius: 10px;
+      padding: 3px;
+      margin-bottom: 28px;
+      border: 1px solid var(--border);
+    }
+
+    .tab {
+      flex: 1;
+      padding: 8px;
+      border-radius: 7px;
+      border: none;
+      background: transparent;
+      color: var(--muted);
+      font-family: 'DM Sans', sans-serif;
+      font-size: 13px;
+      font-weight: 500;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+
+    .tab.active {
+      background: var(--surface);
+      color: var(--text);
+      box-shadow: 0 1px 4px rgba(0,0,0,0.3);
+    }
+
+    .panel { display: none; }
+    .panel.active { display: block; }
+
+    .label {
+      font-size: 11px;
+      font-weight: 500;
+      color: var(--muted);
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      margin-bottom: 8px;
+    }
+
+    .btn-primary {
+      width: 100%;
+      padding: 12px;
+      background: var(--accent);
+      color: white;
+      border: none;
+      border-radius: 10px;
+      font-family: 'DM Sans', sans-serif;
+      font-size: 14px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.2s;
+      letter-spacing: -0.2px;
+    }
+
+    .btn-primary:hover { background: #6b5ce7; transform: translateY(-1px); }
+    .btn-primary:active { transform: translateY(0); }
+    .btn-primary:disabled { opacity: 0.4; cursor: not-allowed; transform: none; }
+
+    .code-display {
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 20px;
+      text-align: center;
+      margin-bottom: 20px;
+    }
+
+    .code-text {
+      font-size: 32px;
+      font-weight: 500;
+      letter-spacing: 0.25em;
+      color: var(--accent);
+    }
+
+    .code-hint {
+      font-size: 11px;
+      color: var(--muted);
+      margin-top: 6px;
+    }
+
+    .input-field {
+      width: 100%;
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 12px 16px;
+      color: var(--text);
+      font-family: 'DM Mono', monospace;
+      font-size: 18px;
+      letter-spacing: 0.2em;
+      text-align: center;
+      text-transform: uppercase;
+      outline: none;
+      margin-bottom: 16px;
+      transition: border-color 0.2s;
+    }
+
+    .input-field:focus { border-color: var(--accent); }
+    .input-field::placeholder { color: var(--muted); font-size: 14px; letter-spacing: 0.05em; }
+
+    .status-dot {
+      display: inline-block;
+      width: 6px;
+      height: 6px;
+      border-radius: 50%;
+      background: var(--muted);
+      margin-right: 6px;
+      animation: pulse 2s infinite;
+    }
+
+    .status-dot.waiting { background: #f59e0b; }
+    .status-dot.connected { background: #10b981; animation: none; }
+
+    @keyframes pulse {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.3; }
+    }
+
+    .status-bar {
+      display: flex;
+      align-items: center;
+      font-size: 12px;
+      color: var(--muted);
+      margin-bottom: 16px;
+    }
+
+    .btn-secondary {
+      width: 100%;
+      padding: 10px;
+      background: transparent;
+      color: var(--muted);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      font-family: 'DM Sans', sans-serif;
+      font-size: 13px;
+      cursor: pointer;
+      transition: all 0.2s;
+      margin-top: 8px;
+    }
+
+    .btn-secondary:hover { border-color: var(--muted); color: var(--text); }
+
+    .error-msg {
+      font-size: 12px;
+      color: #f87171;
+      text-align: center;
+      margin-bottom: 12px;
+      display: none;
+    }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <div class="logo">
+      <div class="logo-icon">
+        <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+          <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-1 14H9V8h2v8zm4 0h-2V8h2v8z"/>
+        </svg>
+      </div>
+      <span class="logo-text">PeerDrop</span>
+    </div>
+
+    <div class="tab-group">
+      <button class="tab active" onclick="switchTab('host')">ホストする</button>
+      <button class="tab" onclick="switchTab('guest')">参加する</button>
+    </div>
+
+    <!-- ホストパネル -->
+    <div id="panel-host" class="panel active">
+      <div id="host-init">
+        <p style="font-size:13px; color:var(--muted); margin-bottom:24px; line-height:1.6;">
+          招待コードを発行して相手を呼びましょう。コードを共有するとP2P接続が始まります。
+        </p>
+        <button class="btn-primary" onclick="createSession()">招待コードを発行</button>
+      </div>
+
+      <div id="host-waiting" style="display:none;">
+        <div class="label">招待コード</div>
+        <div class="code-display">
+          <div class="code-text mono" id="host-code">------</div>
+          <div class="code-hint">このコードを相手に共有してください</div>
+        </div>
+        <div class="status-bar">
+          <span class="status-dot waiting" id="host-status-dot"></span>
+          <span id="host-status-text">相手の接続を待っています...</span>
+        </div>
+        <button class="btn-secondary" onclick="invalidateSession()">コードを無効にする</button>
+      </div>
+    </div>
+
+    <!-- ゲストパネル -->
+    <div id="panel-guest" class="panel">
+      <div class="label">招待コードを入力</div>
+      <input
+        class="input-field"
+        id="guest-code-input"
+        type="text"
+        maxlength="6"
+        placeholder="XXXXXX"
+        oninput="this.value = this.value.toUpperCase()"
+      />
+      <div class="error-msg" id="guest-error">コードが見つかりません。確認してください。</div>
+      <button class="btn-primary" id="guest-join-btn" onclick="joinSession()">参加する</button>
+    </div>
+  </div>
+
+  <script>
+    const STUN = { iceServers: [{ urls: 'stun:stun.l.google.com:19302' }] };
+    let pc = null;
+    let currentCode = null;
+    let pollTimer = null;
+
+    function switchTab(tab) {
+      document.querySelectorAll('.tab').forEach((t, i) => {
+        t.classList.toggle('active', (i === 0 && tab === 'host') || (i === 1 && tab === 'guest'));
+      });
+      document.getElementById('panel-host').classList.toggle('active', tab === 'host');
+      document.getElementById('panel-guest').classList.toggle('active', tab === 'guest');
+    }
+
+    async function createSession() {
+      const res = await fetch('/api/session', { method: 'POST' });
+      const { code } = await res.json();
+      currentCode = code;
+
+      document.getElementById('host-init').style.display = 'none';
+      document.getElementById('host-waiting').style.display = 'block';
+      document.getElementById('host-code').textContent = code;
+
+      pc = new RTCPeerConnection(STUN);
+      setupHostPC(pc, code);
+
+      const offer = await pc.createOffer();
+      await pc.setLocalDescription(offer);
+
+      await fetch('/api/signal', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ code, role: 'host', type: 'sdp', data: offer })
+      });
+
+      pc.onicecandidate = async (e) => {
+        if (e.candidate) {
+          await fetch('/api/signal', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ code, role: 'host', type: 'candidate', data: e.candidate })
+          });
+        }
+      };
+
+      pollTimer = setInterval(() => pollForGuest(code), 2000);
+    }
+
+    function setupHostPC(pc, code) {
+      const channels = {};
+      channels.chat = pc.createDataChannel('chat');
+      channels.file = pc.createDataChannel('file');
+
+      pc.onconnectionstatechange = () => {
+        if (pc.connectionState === 'connected') {
+          clearInterval(pollTimer);
+          sessionStorage.setItem('role', 'host');
+          sessionStorage.setItem('code', code);
+          sessionStorage.setItem('channels', 'ready');
+          // DataChannelオブジェクトはsessionStorageに入らないのでroom.htmlで再取得
+          window._channels = channels;
+          window._pc = pc;
+          goToRoom();
+        }
+      };
+    }
+
+    async function pollForGuest(code) {
+      const res = await fetch(`/api/session?code=${code}`);
+      if (!res.ok) return;
+      const session = await res.json();
+      if (session.guestSDP && pc.signalingState !== 'stable') {
+        await pc.setRemoteDescription(session.guestSDP);
+        for (const c of session.guestCandidates) {
+          await pc.addIceCandidate(c).catch(() => {});
+        }
+        document.getElementById('host-status-dot').className = 'status-dot connected';
+        document.getElementById('host-status-text').textContent = '接続中...';
+      }
+    }
+
+    async function joinSession() {
+      const code = document.getElementById('guest-code-input').value.trim();
+      if (code.length !== 6) return;
+
+      const btn = document.getElementById('guest-join-btn');
+      btn.disabled = true;
+      btn.textContent = '接続中...';
+      document.getElementById('guest-error').style.display = 'none';
+
+      const res = await fetch(`/api/session?code=${code}`);
+      if (!res.ok) {
+        document.getElementById('guest-error').style.display = 'block';
+        btn.disabled = false;
+        btn.textContent = '参加する';
+        return;
+      }
+
+      const session = await res.json();
+      if (!session.hostSDP) {
+        document.getElementById('guest-error').style.display = 'block';
+        btn.disabled = false;
+        btn.textContent = '参加する';
+        return;
+      }
+
+      pc = new RTCPeerConnection(STUN);
+      currentCode = code;
+
+      pc.onicecandidate = async (e) => {
+        if (e.candidate) {
+          await fetch('/api/signal', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ code, role: 'guest', type: 'candidate', data: e.candidate })
+          });
+        }
+      };
+
+      pc.ondatachannel = (e) => {
+        if (!window._channels) window._channels = {};
+        window._channels[e.channel.label] = e.channel;
+      };
+
+      pc.onconnectionstatechange = () => {
+        if (pc.connectionState === 'connected') {
+          sessionStorage.setItem('role', 'guest');
+          sessionStorage.setItem('code', code);
+          window._pc = pc;
+          goToRoom();
+        }
+      };
+
+      await pc.setRemoteDescription(session.hostSDP);
+      for (const c of session.hostCandidates) {
+        await pc.addIceCandidate(c).catch(() => {});
+      }
+
+      const answer = await pc.createAnswer();
+      await pc.setLocalDescription(answer);
+
+      await fetch('/api/signal', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ code, role: 'guest', type: 'sdp', data: answer })
+      });
+    }
+
+    function goToRoom() {
+      window.location.href = '/room.html';
+    }
+
+    async function invalidateSession() {
+      if (!currentCode) return;
+      clearInterval(pollTimer);
+      await fetch(`/api/session?code=${currentCode}`, { method: 'DELETE' });
+      currentCode = null;
+      document.getElementById('host-init').style.display = 'block';
+      document.getElementById('host-waiting').style.display = 'none';
+    }
+  </script>
+</body>
+</html>
